@@ -8,7 +8,14 @@ pick = (obj, key) ->
   obj
 
 tryTest = (test, refs, schema) ->
-  jsf(schema, refs).catch (error) ->
+  return if test.skip
+
+  (if test.async
+    jsf.resolve(schema, refs)
+  else
+    Promise.resolve().then ->
+      jsf(schema, refs))
+  .catch (error) ->
     if typeof test.throws is 'string'
       expect(error).toMatch new RegExp(test.throws, 'im')
 
@@ -34,21 +41,8 @@ tryTest = (test, refs, schema) ->
     if test.type
       expect(sample).toHaveType test.type
 
-    # strict checks
-    if test.nonEmpty
-      expect(sample).toHaveNonEmptyProps()
-
     if test.valid
-      try
-        expect(sample).toHaveSchema [schema, refs]
-      catch e
-        throw new Error """
-          #{suite.description} (#{e})
-
-          #{JSON.stringify(sample, null, 2)}
-
-          #{JSON.stringify(schema, null, 2)}
-        """
+      expect(sample).toHaveSchema [schema, refs]
 
     if "equal" of test
       expect(sample).toEqual test.equal
@@ -84,7 +78,7 @@ glob.sync("#{__dirname}/**/*.json").forEach (file) ->
 
           # support for "exhaustive" testing, increase or set in .json spec
           # for detecting more bugs quickly by executing the same test N-times
-          nth = test.repeat or 1
+          nth = test.repeat or (if process.CI then 100 else 10)
 
           tasks = []
           tasks.push(tryTest(test, refs, schema)) while nth--

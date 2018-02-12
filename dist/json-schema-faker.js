@@ -1,12 +1,11 @@
 /*!
- * json-schema-faker library v0.5.0-rc1
+ * json-schema-faker library v0.5.0-rc11
  * http://json-schema-faker.js.org
- * @preserve
  *
  * Copyright (c) 2014-2017 Alvaro Cabrera & Tomasz Ducin
  * Released under the MIT license
  *
- * Date: 2017-04-10 06:15:46.461Z
+ * Date: 2017-09-12 16:10:04.552Z
  */
 
 (function (global, factory) {
@@ -15614,6 +15613,539 @@ var jsonSchemaRefParser$1 = Object.freeze({
 	default: jsonSchemaRefParser
 });
 
+function createCommonjsModule(fn, module) {
+	return module = { exports: {} }, fn(module, module.exports), module.exports;
+}
+
+'use strict';
+
+// https://gist.github.com/pjt33/efb2f1134bab986113fd
+
+function URLUtils(url, baseURL) {
+  // remove leading ./
+  url = url.replace(/^\.\//, '');
+
+  var m = String(url).replace(/^\s+|\s+$/g, '').match(/^([^:\/?#]+:)?(?:\/\/(?:([^:@]*)(?::([^:@]*))?@)?(([^:\/?#]*)(?::(\d*))?))?([^?#]*)(\?[^#]*)?(#[\s\S]*)?/);
+  if (!m) {
+    throw new RangeError();
+  }
+  var href = m[0] || '';
+  var protocol = m[1] || '';
+  var username = m[2] || '';
+  var password = m[3] || '';
+  var host = m[4] || '';
+  var hostname = m[5] || '';
+  var port = m[6] || '';
+  var pathname = m[7] || '';
+  var search = m[8] || '';
+  var hash = m[9] || '';
+  if (baseURL !== undefined) {
+    var base = new URLUtils(baseURL);
+    var flag = protocol === '' && host === '' && username === '';
+    if (flag && pathname === '' && search === '') {
+      search = base.search;
+    }
+    if (flag && pathname.charAt(0) !== '/') {
+      pathname = (pathname !== '' ? (base.pathname.slice(0, base.pathname.lastIndexOf('/') + 1) + pathname) : base.pathname);
+    }
+    // dot segments removal
+    var output = [];
+
+    pathname.replace(/\/?[^\/]+/g, function(p) {
+      if (p === '/..') {
+        output.pop();
+      } else {
+        output.push(p);
+      }
+    });
+
+    pathname = output.join('') || '/';
+
+    if (flag) {
+      port = base.port;
+      hostname = base.hostname;
+      host = base.host;
+      password = base.password;
+      username = base.username;
+    }
+    if (protocol === '') {
+      protocol = base.protocol;
+    }
+    href = protocol + (host !== '' ? '//' : '') + (username !== '' ? username + (password !== '' ? ':' + password : '') + '@' : '') + host + pathname + search + hash;
+  }
+  this.href = href;
+  this.origin = protocol + (host !== '' ? '//' + host : '');
+  this.protocol = protocol;
+  this.username = username;
+  this.password = password;
+  this.host = host;
+  this.hostname = hostname;
+  this.port = port;
+  this.pathname = pathname;
+  this.search = search;
+  this.hash = hash;
+}
+
+function isURL(path) {
+  if (typeof path === 'string' && /^\w+:\/\//.test(path)) {
+    return true;
+  }
+}
+
+function parseURI(href, base) {
+  return new URLUtils(href, base);
+}
+
+function resolveURL(base, href) {
+  base = base || 'http://json-schema.org/schema#';
+
+  href = parseURI(href, base);
+  base = parseURI(base);
+
+  if (base.hash && !href.hash) {
+    return href.href + base.hash;
+  }
+
+  return href.href;
+}
+
+function getDocumentURI(uri) {
+  return typeof uri === 'string' && uri.split('#')[0];
+}
+
+function isKeyword(prop) {
+  return prop === 'enum' || prop === 'default' || prop === 'required';
+}
+
+var helpers = {
+  isURL: isURL,
+  parseURI: parseURI,
+  isKeyword: isKeyword,
+  resolveURL: resolveURL,
+  getDocumentURI: getDocumentURI
+};
+
+var findReference = createCommonjsModule(function (module) {
+'use strict';
+
+
+
+function get(obj, path) {
+  var hash = path.split('#')[1];
+
+  var parts = hash.split('/').slice(1);
+
+  while (parts.length) {
+    var key = decodeURIComponent(parts.shift()).replace(/~1/g, '/').replace(/~0/g, '~');
+
+    if (typeof obj[key] === 'undefined') {
+      throw new Error('JSON pointer not found: ' + path);
+    }
+
+    obj = obj[key];
+  }
+
+  return obj;
+}
+
+var find = module.exports = function(id, refs) {
+  var target = refs[id] || refs[id.split('#')[1]] || refs[helpers.getDocumentURI(id)];
+
+  if (target) {
+    target = id.indexOf('#/') > -1 ? get(target, id) : target;
+  } else {
+    for (var key in refs) {
+      if (helpers.resolveURL(refs[key].id, id) === refs[key].id) {
+        target = refs[key];
+        break;
+      }
+    }
+  }
+
+  if (!target) {
+    throw new Error('Reference not found: ' + id);
+  }
+
+  while (target.$ref) {
+    target = find(target.$ref, refs);
+  }
+
+  return target;
+};
+});
+
+var deepExtend_1 = createCommonjsModule(function (module) {
+/*!
+ * @description Recursive object extending
+ * @author Viacheslav Lotsmanov <lotsmanov89@gmail.com>
+ * @license MIT
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2013-2015 Viacheslav Lotsmanov
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+ * the Software, and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+ * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+'use strict';
+
+function isSpecificValue(val) {
+	return (
+		val instanceof Buffer
+		|| val instanceof Date
+		|| val instanceof RegExp
+	) ? true : false;
+}
+
+function cloneSpecificValue(val) {
+	if (val instanceof Buffer) {
+		var x = new Buffer(val.length);
+		val.copy(x);
+		return x;
+	} else if (val instanceof Date) {
+		return new Date(val.getTime());
+	} else if (val instanceof RegExp) {
+		return new RegExp(val);
+	} else {
+		throw new Error('Unexpected situation');
+	}
+}
+
+/**
+ * Recursive cloning array.
+ */
+function deepCloneArray(arr) {
+	var clone = [];
+	arr.forEach(function (item, index) {
+		if (typeof item === 'object' && item !== null) {
+			if (Array.isArray(item)) {
+				clone[index] = deepCloneArray(item);
+			} else if (isSpecificValue(item)) {
+				clone[index] = cloneSpecificValue(item);
+			} else {
+				clone[index] = deepExtend({}, item);
+			}
+		} else {
+			clone[index] = item;
+		}
+	});
+	return clone;
+}
+
+/**
+ * Extening object that entered in first argument.
+ *
+ * Returns extended object or false if have no target object or incorrect type.
+ *
+ * If you wish to clone source object (without modify it), just use empty new
+ * object as first argument, like this:
+ *   deepExtend({}, yourObj_1, [yourObj_N]);
+ */
+var deepExtend = module.exports = function (/*obj_1, [obj_2], [obj_N]*/) {
+	if (arguments.length < 1 || typeof arguments[0] !== 'object') {
+		return false;
+	}
+
+	if (arguments.length < 2) {
+		return arguments[0];
+	}
+
+	var target = arguments[0];
+
+	// convert arguments to array and cut off target object
+	var args = Array.prototype.slice.call(arguments, 1);
+
+	var val, src;
+
+	args.forEach(function (obj) {
+		// skip argument if isn't an object, is null, or is an array
+		if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) {
+			return;
+		}
+
+		Object.keys(obj).forEach(function (key) {
+			src = target[key]; // source value
+			val = obj[key]; // new value
+
+			// recursion prevention
+			if (val === target) {
+				return;
+
+			/**
+			 * if new value isn't object then just overwrite by new value
+			 * instead of extending.
+			 */
+			} else if (typeof val !== 'object' || val === null) {
+				target[key] = val;
+				return;
+
+			// just clone arrays (and recursive clone objects inside)
+			} else if (Array.isArray(val)) {
+				target[key] = deepCloneArray(val);
+				return;
+
+			// custom cloning and overwrite for specific objects
+			} else if (isSpecificValue(val)) {
+				target[key] = cloneSpecificValue(val);
+				return;
+
+			// overwrite by new value if source isn't object or array
+			} else if (typeof src !== 'object' || src === null || Array.isArray(src)) {
+				target[key] = deepExtend({}, val);
+				return;
+
+			// source value and new value is objects both, extending...
+			} else {
+				target[key] = deepExtend(src, val);
+				return;
+			}
+		});
+	});
+
+	return target;
+};
+});
+
+'use strict';
+
+
+
+
+
+
+
+function copy(_, obj, refs, parent, resolve) {
+  var target =  Array.isArray(obj) ? [] : {};
+
+  if (typeof obj.$ref === 'string') {
+    var id = obj.$ref;
+    var base = helpers.getDocumentURI(id);
+    var local = id.indexOf('#/') > -1;
+
+    if (local || (resolve && base !== parent)) {
+      var fixed = findReference(id, refs);
+
+      deepExtend_1(obj, fixed);
+
+      delete obj.$ref;
+      delete obj.id;
+    }
+
+    if (_[id]) {
+      return obj;
+    }
+
+    _[id] = 1;
+  }
+
+  for (var prop in obj) {
+    if (typeof obj[prop] === 'object' && obj[prop] !== null && !helpers.isKeyword(prop)) {
+      target[prop] = copy(_, obj[prop], refs, parent, resolve);
+    } else {
+      target[prop] = obj[prop];
+    }
+  }
+
+  return target;
+}
+
+var resolveSchema = function(obj, refs, resolve) {
+  var fixedId = helpers.resolveURL(obj.$schema, obj.id),
+      parent = helpers.getDocumentURI(fixedId);
+
+  return copy({}, obj, refs, parent, resolve);
+};
+
+var cloneObj = createCommonjsModule(function (module) {
+'use strict';
+
+var clone = module.exports = function(obj, seen) {
+  seen = seen || [];
+
+  if (seen.indexOf(obj) > -1) {
+    throw new Error('unable dereference circular structures');
+  }
+
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  seen = seen.concat([obj]);
+
+  var target = Array.isArray(obj) ? [] : {};
+
+  function copy(key, value) {
+    target[key] = clone(value, seen);
+  }
+
+  if (Array.isArray(target)) {
+    obj.forEach(function(value, key) {
+      copy(key, value);
+    });
+  } else if (Object.prototype.toString.call(obj) === '[object Object]') {
+    Object.keys(obj).forEach(function(key) {
+      copy(key, obj[key]);
+    });
+  }
+
+  return target;
+};
+});
+
+'use strict';
+
+
+
+
+
+var SCHEMA_URI = [
+  'http://json-schema.org/schema#',
+  'http://json-schema.org/draft-04/schema#'
+];
+
+function expand(obj, parent, callback) {
+  if (obj) {
+    var id = typeof obj.id === 'string' ? obj.id : '#';
+
+    if (!helpers.isURL(id)) {
+      id = helpers.resolveURL(parent === id ? null : parent, id);
+    }
+
+    if (typeof obj.$ref === 'string' && !helpers.isURL(obj.$ref)) {
+      obj.$ref = helpers.resolveURL(id, obj.$ref);
+    }
+
+    if (typeof obj.id === 'string') {
+      obj.id = parent = id;
+    }
+  }
+
+  for (var key in obj) {
+    var value = obj[key];
+
+    if (typeof value === 'object' && value !== null && !helpers.isKeyword(key)) {
+      expand(value, parent, callback);
+    }
+  }
+
+  if (typeof callback === 'function') {
+    callback(obj);
+  }
+}
+
+var normalizeSchema = function(fakeroot, schema, push) {
+  if (typeof fakeroot === 'object') {
+    push = schema;
+    schema = fakeroot;
+    fakeroot = null;
+  }
+
+  var base = fakeroot || '',
+      copy = cloneObj(schema);
+
+  if (copy.$schema && SCHEMA_URI.indexOf(copy.$schema) === -1) {
+    throw new Error('Unsupported schema version (v4 only)');
+  }
+
+  base = helpers.resolveURL(copy.$schema || SCHEMA_URI[0], base);
+
+  expand(copy, helpers.resolveURL(copy.id || '#', base), push);
+
+  copy.id = copy.id || base;
+
+  return copy;
+};
+
+var lib$2 = createCommonjsModule(function (module) {
+'use strict';
+
+
+
+helpers.findByRef = findReference;
+helpers.resolveSchema = resolveSchema;
+helpers.normalizeSchema = normalizeSchema;
+
+var instance = module.exports = function() {
+  function $ref(fakeroot, schema, refs, ex) {
+    if (typeof fakeroot === 'object') {
+      ex = refs;
+      refs = schema;
+      schema = fakeroot;
+      fakeroot = undefined;
+    }
+
+    if (typeof schema !== 'object') {
+      throw new Error('schema must be an object');
+    }
+
+    if (typeof refs === 'object' && refs !== null) {
+      var aux = refs;
+
+      refs = [];
+
+      for (var k in aux) {
+        aux[k].id = aux[k].id || k;
+        refs.push(aux[k]);
+      }
+    }
+
+    if (typeof refs !== 'undefined' && !Array.isArray(refs)) {
+      ex = !!refs;
+      refs = [];
+    }
+
+    function push(ref) {
+      if (typeof ref.id === 'string') {
+        var id = helpers.resolveURL(fakeroot, ref.id).replace(/\/#?$/, '');
+
+        if (id.indexOf('#') > -1) {
+          var parts = id.split('#');
+
+          if (parts[1].charAt() === '/') {
+            id = parts[0];
+          } else {
+            id = parts[1] || parts[0];
+          }
+        }
+
+        if (!$ref.refs[id]) {
+          $ref.refs[id] = ref;
+        }
+      }
+    }
+
+    (refs || []).concat([schema]).forEach(function(ref) {
+      schema = helpers.normalizeSchema(fakeroot, ref, push);
+      push(schema);
+    });
+
+    return helpers.resolveSchema(schema, $ref.refs, ex);
+  }
+
+  $ref.refs = {};
+  $ref.util = helpers;
+
+  return $ref;
+};
+
+instance.util = helpers;
+});
+
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
@@ -15629,8 +16161,13 @@ See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
 /* global Reflect, Promise */
+
+var extendStatics = Object.setPrototypeOf ||
+    ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+    function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+
 function __extends(d, b) {
-    for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
+    extendStatics(d, b);
     function __() { this.constructor = d; }
     d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 }
@@ -15678,8 +16215,8 @@ function __awaiter(thisArg, _arguments, P, generator) {
 }
 
 function __generator(thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t;
-    return { next: verb(0), "throw": verb(1), "return": verb(2) };
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
     function verb(n) { return function (v) { return step([n, v]); }; }
     function step(op) {
         if (f) throw new TypeError("Generator is already executing.");
@@ -15705,6 +16242,72 @@ function __generator(thisArg, body) {
     }
 }
 
+function __exportStar(m, exports) {
+    for (var p in m) if (!exports.hasOwnProperty(p)) exports[p] = m[p];
+}
+
+function __values(o) {
+    var m = typeof Symbol === "function" && o[Symbol.iterator], i = 0;
+    if (m) return m.call(o);
+    return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+}
+
+function __read(o, n) {
+    var m = typeof Symbol === "function" && o[Symbol.iterator];
+    if (!m) return o;
+    var i = m.call(o), r, ar = [], e;
+    try {
+        while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+    }
+    catch (error) { e = { error: error }; }
+    finally {
+        try {
+            if (r && !r.done && (m = i["return"])) m.call(i);
+        }
+        finally { if (e) throw e.error; }
+    }
+    return ar;
+}
+
+function __spread() {
+    for (var ar = [], i = 0; i < arguments.length; i++)
+        ar = ar.concat(__read(arguments[i]));
+    return ar;
+}
+
+function __await(v) {
+    return this instanceof __await ? (this.v = v, this) : new __await(v);
+}
+
+function __asyncGenerator(thisArg, _arguments, generator) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var g = generator.apply(thisArg, _arguments || []), i, q = [];
+    return i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i;
+    function verb(n) { if (g[n]) i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; }
+    function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
+    function step(r) { r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r);  }
+    function fulfill(value) { resume("next", value); }
+    function reject(value) { resume("throw", value); }
+    function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+}
+
+function __asyncDelegator(o) {
+    var i, p;
+    return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
+    function verb(n, f) { if (o[n]) i[n] = function (v) { return (p = !p) ? { value: __await(o[n](v)), done: n === "return" } : f ? f(v) : v; }; }
+}
+
+function __asyncValues(o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator];
+    return m ? m.call(o) : typeof __values === "function" ? __values(o) : o[Symbol.iterator]();
+}
+
 var tslib_es6 = Object.freeze({
 	__extends: __extends,
 	__assign: __assign,
@@ -15713,14 +16316,18 @@ var tslib_es6 = Object.freeze({
 	__param: __param,
 	__metadata: __metadata,
 	__awaiter: __awaiter,
-	__generator: __generator
+	__generator: __generator,
+	__exportStar: __exportStar,
+	__values: __values,
+	__read: __read,
+	__spread: __spread,
+	__await: __await,
+	__asyncGenerator: __asyncGenerator,
+	__asyncDelegator: __asyncDelegator,
+	__asyncValues: __asyncValues
 });
 
-function createCommonjsModule(fn, module) {
-	return module = { exports: {} }, fn(module, module.exports), module.exports;
-}
-
-var types$1 = {
+var types = {
   ROOT       : 0,
   GROUP      : 1,
   POSITION   : 2,
@@ -15731,90 +16338,88 @@ var types$1 = {
   CHAR       : 7,
 };
 
-var types$3 = types$1;
-
 var INTS = function() {
- return [{ type: types$3.RANGE , from: 48, to: 57 }];
+ return [{ type: types.RANGE , from: 48, to: 57 }];
 };
 
 var WORDS = function() {
  return [
-    { type: types$3.CHAR, value: 95 },
-    { type: types$3.RANGE, from: 97, to: 122 },
-    { type: types$3.RANGE, from: 65, to: 90 }
+    { type: types.CHAR, value: 95 },
+    { type: types.RANGE, from: 97, to: 122 },
+    { type: types.RANGE, from: 65, to: 90 }
   ].concat(INTS());
 };
 
 var WHITESPACE = function() {
  return [
-    { type: types$3.CHAR, value: 9 },
-    { type: types$3.CHAR, value: 10 },
-    { type: types$3.CHAR, value: 11 },
-    { type: types$3.CHAR, value: 12 },
-    { type: types$3.CHAR, value: 13 },
-    { type: types$3.CHAR, value: 32 },
-    { type: types$3.CHAR, value: 160 },
-    { type: types$3.CHAR, value: 5760 },
-    { type: types$3.CHAR, value: 6158 },
-    { type: types$3.CHAR, value: 8192 },
-    { type: types$3.CHAR, value: 8193 },
-    { type: types$3.CHAR, value: 8194 },
-    { type: types$3.CHAR, value: 8195 },
-    { type: types$3.CHAR, value: 8196 },
-    { type: types$3.CHAR, value: 8197 },
-    { type: types$3.CHAR, value: 8198 },
-    { type: types$3.CHAR, value: 8199 },
-    { type: types$3.CHAR, value: 8200 },
-    { type: types$3.CHAR, value: 8201 },
-    { type: types$3.CHAR, value: 8202 },
-    { type: types$3.CHAR, value: 8232 },
-    { type: types$3.CHAR, value: 8233 },
-    { type: types$3.CHAR, value: 8239 },
-    { type: types$3.CHAR, value: 8287 },
-    { type: types$3.CHAR, value: 12288 },
-    { type: types$3.CHAR, value: 65279 }
+    { type: types.CHAR, value: 9 },
+    { type: types.CHAR, value: 10 },
+    { type: types.CHAR, value: 11 },
+    { type: types.CHAR, value: 12 },
+    { type: types.CHAR, value: 13 },
+    { type: types.CHAR, value: 32 },
+    { type: types.CHAR, value: 160 },
+    { type: types.CHAR, value: 5760 },
+    { type: types.CHAR, value: 6158 },
+    { type: types.CHAR, value: 8192 },
+    { type: types.CHAR, value: 8193 },
+    { type: types.CHAR, value: 8194 },
+    { type: types.CHAR, value: 8195 },
+    { type: types.CHAR, value: 8196 },
+    { type: types.CHAR, value: 8197 },
+    { type: types.CHAR, value: 8198 },
+    { type: types.CHAR, value: 8199 },
+    { type: types.CHAR, value: 8200 },
+    { type: types.CHAR, value: 8201 },
+    { type: types.CHAR, value: 8202 },
+    { type: types.CHAR, value: 8232 },
+    { type: types.CHAR, value: 8233 },
+    { type: types.CHAR, value: 8239 },
+    { type: types.CHAR, value: 8287 },
+    { type: types.CHAR, value: 12288 },
+    { type: types.CHAR, value: 65279 }
   ];
 };
 
 var NOTANYCHAR = function() {
   return [
-    { type: types$3.CHAR, value: 10 },
-    { type: types$3.CHAR, value: 13 },
-    { type: types$3.CHAR, value: 8232 },
-    { type: types$3.CHAR, value: 8233 },
+    { type: types.CHAR, value: 10 },
+    { type: types.CHAR, value: 13 },
+    { type: types.CHAR, value: 8232 },
+    { type: types.CHAR, value: 8233 },
   ];
 };
 
 // Predefined class objects.
 var words = function() {
-  return { type: types$3.SET, set: WORDS(), not: false };
+  return { type: types.SET, set: WORDS(), not: false };
 };
 
 var notWords = function() {
-  return { type: types$3.SET, set: WORDS(), not: true };
+  return { type: types.SET, set: WORDS(), not: true };
 };
 
 var ints = function() {
-  return { type: types$3.SET, set: INTS(), not: false };
+  return { type: types.SET, set: INTS(), not: false };
 };
 
 var notInts = function() {
-  return { type: types$3.SET, set: INTS(), not: true };
+  return { type: types.SET, set: INTS(), not: true };
 };
 
 var whitespace = function() {
-  return { type: types$3.SET, set: WHITESPACE(), not: false };
+  return { type: types.SET, set: WHITESPACE(), not: false };
 };
 
 var notWhitespace = function() {
-  return { type: types$3.SET, set: WHITESPACE(), not: true };
+  return { type: types.SET, set: WHITESPACE(), not: true };
 };
 
 var anyChar = function() {
-  return { type: types$3.SET, set: NOTANYCHAR(), not: true };
+  return { type: types.SET, set: NOTANYCHAR(), not: true };
 };
 
-var sets$1 = {
+var sets = {
 	words: words,
 	notWords: notWords,
 	ints: ints,
@@ -15824,11 +16429,7 @@ var sets$1 = {
 	anyChar: anyChar
 };
 
-var util$1 = createCommonjsModule(function (module, exports) {
-var types = types$1;
-var sets  = sets$1;
-
-
+var util = createCommonjsModule(function (module, exports) {
 // All of these are private and only used by randexp.
 // It's assumed that they will always be called with the correct input.
 
@@ -15938,38 +16539,30 @@ exports.error = function(regexp, msg) {
 };
 });
 
-var types$4 = types$1;
-
 var wordBoundary = function() {
-  return { type: types$4.POSITION, value: 'b' };
+  return { type: types.POSITION, value: 'b' };
 };
 
 var nonWordBoundary = function() {
-  return { type: types$4.POSITION, value: 'B' };
+  return { type: types.POSITION, value: 'B' };
 };
 
 var begin = function() {
-  return { type: types$4.POSITION, value: '^' };
+  return { type: types.POSITION, value: '^' };
 };
 
 var end = function() {
-  return { type: types$4.POSITION, value: '$' };
+  return { type: types.POSITION, value: '$' };
 };
 
-var positions$1 = {
+var positions = {
 	wordBoundary: wordBoundary,
 	nonWordBoundary: nonWordBoundary,
 	begin: begin,
 	end: end
 };
 
-var util      = util$1;
-var types     = types$1;
-var sets      = sets$1;
-var positions = positions$1;
-
-
-var index$2 = function(regexpStr) {
+var lib$4 = function(regexpStr) {
   var i = 0, l, c,
       start = { type: types.ROOT, stack: []},
 
@@ -16246,7 +16839,7 @@ var index$2 = function(regexpStr) {
 
 var types_1 = types;
 
-index$2.types = types_1;
+lib$4.types = types_1;
 
 //protected helper class
 function _SubRange(low, high) {
@@ -16391,12 +16984,10 @@ DiscontinuousRange.prototype.clone = function () {
     return new DiscontinuousRange(this);
 };
 
-var index$4 = DiscontinuousRange;
+var discontinuousRange = DiscontinuousRange;
 
 var randexp = createCommonjsModule(function (module) {
-var ret = index$2;
-var DRange = index$4;
-var types = ret.types;
+var types = lib$4.types;
 
 
 /**
@@ -16429,7 +17020,7 @@ function randBool() {
  * @return {Object}
  */
 function randSelect(arr) {
-  if (arr instanceof DRange) {
+  if (arr instanceof discontinuousRange) {
     return arr.index(this.randInt(0, arr.length - 1));
   }
   return arr[this.randInt(0, arr.length - 1)];
@@ -16444,12 +17035,12 @@ function randSelect(arr) {
  * @return {DiscontinuousRange}
  */
 function expand(token) {
-  if (token.type === ret.types.CHAR) {
-    return new DRange(token.value);
-  } else if (token.type === ret.types.RANGE) {
-    return new DRange(token.from, token.to);
+  if (token.type === lib$4.types.CHAR) {
+    return new discontinuousRange(token.value);
+  } else if (token.type === lib$4.types.RANGE) {
+    return new discontinuousRange(token.from, token.to);
   } else {
-    var drange = new DRange();
+    var drange = new discontinuousRange();
     for (var i = 0; i < token.set.length; i++) {
       var subrange = expand.call(this, token.set[i]);
       drange.add(subrange);
@@ -16482,7 +17073,7 @@ function checkCustom(randexp, regexp) {
   if (typeof regexp.max === 'number') {
     randexp.max = regexp.max;
   }
-  if (regexp.defaultRange instanceof DRange) {
+  if (regexp.defaultRange instanceof discontinuousRange) {
     randexp.defaultRange = regexp.defaultRange;
   }
   if (typeof regexp.randInt === 'function') {
@@ -16511,7 +17102,7 @@ var RandExp = module.exports = function(regexp, m) {
     throw new Error('Expected a regexp or string');
   }
 
-  this.tokens = ret(regexp);
+  this.tokens = lib$4(regexp);
 };
 
 
@@ -16551,7 +17142,7 @@ RandExp.sugar = function() {
 
 // This allows expanding to include additional characters
 // for instance: RandExp.defaultRange.add(0, 65535);
-RandExp.prototype.defaultRange = new DRange(32, 126);
+RandExp.prototype.defaultRange = new discontinuousRange(32, 126);
 
 
 /**
@@ -16639,18 +17230,19 @@ function gen(token, groups) {
 }
 });
 
-var require$$0$3 = ( jsonSchemaRefParser$1 && jsonSchemaRefParser$1['default'] ) || jsonSchemaRefParser$1;
+var require$$0 = ( jsonSchemaRefParser$1 && jsonSchemaRefParser ) || jsonSchemaRefParser$1;
 
-var require$$1$2 = ( tslib_es6 && tslib_es6['default'] ) || tslib_es6;
+var tslib_1 = ( tslib_es6 && undefined ) || tslib_es6;
 
 function _interopDefault$1 (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
 
-var $RefParser = _interopDefault$1(require$$0$3);
-var tslib_1 = require$$1$2;
+var $RefParser = _interopDefault$1(require$$0);
+var deref = _interopDefault$1(lib$2);
+
 
 // dynamic proxy for custom generators
 function proxy(gen) {
-    return function (value) {
+    return function (value, schema, property) {
         var fn = value;
         var args = [];
         // support for nested object, first-key is the generator
@@ -16677,6 +17269,14 @@ function proxy(gen) {
         // invoke dynamic generators
         if (typeof value === 'function') {
             value = value.apply(ctx, args);
+        }
+        // test for pending callbacks
+        if (Object.prototype.toString.call(value) === '[object Object]') {
+            for (var key in value) {
+                if (typeof value[key] === 'function') {
+                    throw new Error('Cannot resolve value for "' + property + ': ' + fn + '", given: ' + value);
+                }
+            }
         }
         return value;
     };
@@ -16736,10 +17336,10 @@ var Container = (function () {
         var keys = Object.keys(schema);
         var length = keys.length;
         while (length--) {
-            var fn = keys[length];
+            var fn = keys[length].replace(/^x-/, '');
             var gen = this.support[fn];
             if (typeof gen === 'function') {
-                schema.generate = function () { return gen(schema[fn], schema); };
+                schema.generate = function () { return gen(schema[keys[length]], schema, keys[length]); };
                 break;
             }
         }
@@ -16796,7 +17396,7 @@ var registry = new Registry();
  * @param callback
  * @returns {any}
  */
-function formatAPI(nameOrFormatMap, callback) {
+function formatAPI$1(nameOrFormatMap, callback) {
     if (typeof nameOrFormatMap === 'undefined') {
         return registry.list();
     }
@@ -16830,6 +17430,7 @@ var OptionRegistry = (function (_super) {
         _this.data['defaultMinItems'] = 0;
         _this.data['defaultRandExpMax'] = 10;
         _this.data['alwaysFakeOptionals'] = false;
+        _this.data['random'] = Math.random;
         return _this;
     }
     return OptionRegistry;
@@ -16852,11 +17453,15 @@ function optionAPI(nameOrOptionMap) {
     }
 }
 
-var RandExp = randexp;
+
 // set maximum default, see #193
-RandExp.prototype.max = 10;
+randexp.prototype.max = 10;
+// same implementation as the original except using our random
+randexp.prototype.randInt = function (a, b) {
+    return a + Math.floor(optionAPI('random')() * (1 + b - a));
+};
 function _randexp(value) {
-    var re = new RandExp(value);
+    var re = new randexp(value);
     // apply given setting
     re.max = optionAPI('defaultRandExpMax');
     return re.gen();
@@ -16921,26 +17526,19 @@ function typecast(value, schema) {
             return value;
     }
 }
-function clone(arr) {
-    var out = [];
-    arr.forEach(function (item, index) {
-        if (typeof item === 'object' && item !== null) {
-            out[index] = Array.isArray(item) ? clone(item) : merge({}, item);
-        }
-        else {
-            out[index] = item;
-        }
-    });
-    return out;
-}
-// TODO refactor merge function
 function merge(a, b) {
     for (var key in b) {
         if (typeof b[key] !== 'object' || b[key] === null) {
             a[key] = b[key];
         }
         else if (Array.isArray(b[key])) {
-            a[key] = (a[key] || []).concat(clone(b[key]));
+            a[key] = a[key] || [];
+            // fix #292 - skip duplicated values from merge object (b)
+            b[key].forEach(function (value) {
+                if (a[key].indexOf(value)) {
+                    a[key].push(value);
+                }
+            });
         }
         else if (typeof a[key] !== 'object' || a[key] === null || Array.isArray(a[key])) {
             a[key] = merge({}, b[key]);
@@ -16951,30 +17549,43 @@ function merge(a, b) {
     }
     return a;
 }
-function clean(obj, isArray) {
+function clean(obj, isArray, requiredProps) {
     if (!obj || typeof obj !== 'object') {
         return obj;
     }
     if (Array.isArray(obj)) {
-        return obj
+        obj = obj
             .map(function (value) { return clean(value, true); })
-            .filter(function (value) { return value; });
+            .filter(function (value) { return typeof value !== 'undefined'; });
+        return obj;
     }
     Object.keys(obj).forEach(function (k) {
-        obj[k] = clean(obj[k]);
+        if (!requiredProps || requiredProps.indexOf(k) === -1) {
+            if (Array.isArray(obj[k]) && !obj[k].length) {
+                delete obj[k];
+            }
+        }
+        else {
+            obj[k] = clean(obj[k]);
+        }
     });
     if (!Object.keys(obj).length && isArray) {
         return undefined;
     }
     return obj;
 }
+function short(schema) {
+    var s = JSON.stringify(schema);
+    var l = JSON.stringify(schema, null, 2);
+    return s.length > 400 ? l.substr(0, 400) + '...' : l;
+}
 var utils = {
     getSubAttribute: getSubAttribute,
     hasProperties: hasProperties,
     typecast: typecast,
-    clone: clone,
     merge: merge,
     clean: clean,
+    short: short,
     randexp: _randexp
 };
 
@@ -16986,7 +17597,7 @@ var utils = {
  * @returns {T}
  */
 function pick(collection) {
-    return collection[Math.floor(Math.random() * collection.length)];
+    return collection[Math.floor(optionAPI('random')() * collection.length)];
 }
 /**
  * Returns shuffled collection of elements
@@ -16997,7 +17608,7 @@ function pick(collection) {
 function shuffle(collection) {
     var tmp, key, copy = collection.slice(), length = collection.length;
     for (; length > 0;) {
-        key = Math.floor(Math.random() * length);
+        key = Math.floor(optionAPI('random')() * length);
         // swap
         tmp = copy[--length];
         copy[length] = copy[key];
@@ -17018,7 +17629,7 @@ var MAX_NUMBER = 100;
  * @see http://stackoverflow.com/a/1527820/769384
  */
 function getRandom(min, max) {
-    return Math.random() * (max - min) + min;
+    return optionAPI('random')() * (max - min) + min;
 }
 /**
  * Generates random number according to parameters passed
@@ -17041,7 +17652,7 @@ function number(min, max, defMin, defMax, hasPrecision) {
     }
     var result = getRandom(min, max);
     if (!hasPrecision) {
-        return parseInt(result + '', 10);
+        return Math.round(result);
     }
     return result;
 }
@@ -17144,7 +17755,7 @@ function inferType(obj, schemaPath) {
  * @returns {boolean}
  */
 function booleanGenerator() {
-    return Math.random() > 0.5;
+    return optionAPI('random')() > 0.5;
 }
 
 var booleanType = booleanGenerator;
@@ -17186,7 +17797,7 @@ var arrayType = function arrayType(value, path, resolve, traverseCallback) {
     var items = [];
     if (!(value.items || value.additionalItems)) {
         if (utils.hasProperties(value, 'minItems', 'maxItems', 'uniqueItems')) {
-            throw new ParseError('missing items for ' + JSON.stringify(value), path);
+            throw new ParseError('missing items for ' + utils.short(value), path);
         }
         return items;
     }
@@ -17195,7 +17806,7 @@ var arrayType = function arrayType(value, path, resolve, traverseCallback) {
     // so that value.items.map becomes recognized for typescript compiler
     var tmpItems = value.items;
     if (tmpItems instanceof Array) {
-        return Array.prototype.concat.apply(items, tmpItems.map(function (item, key) {
+        return Array.prototype.concat.call(items, tmpItems.map(function (item, key) {
             var itemSubpath = path.concat(['items', key + '']);
             return traverseCallback(item, itemSubpath, resolve);
         }));
@@ -17218,7 +17829,8 @@ var arrayType = function arrayType(value, path, resolve, traverseCallback) {
             minItems = maxItems;
         }
     }
-    var length = random.number(minItems, maxItems, 1, 5), 
+    var length = (maxItems != null && optionAPI('alwaysFakeOptionals')) ?
+        maxItems : random.number(minItems, maxItems, 1, 5), 
     // TODO below looks bad. Should additionalItems be copied as-is?
     sample = typeof value.additionalItems === 'object' ? value.additionalItems : {};
     for (var current = items.length; current < length; current++) {
@@ -17234,7 +17846,7 @@ var arrayType = function arrayType(value, path, resolve, traverseCallback) {
 
 var MIN_INTEGER = -100000000;
 var MAX_INTEGER = 100000000;
-var numberType = function numberType(value) {
+var numberType$1 = function numberType(value) {
     var min = typeof value.minimum === 'undefined' ? MIN_INTEGER : value.minimum, max = typeof value.maximum === 'undefined' ? MAX_INTEGER : value.maximum, multipleOf = value.multipleOf;
     if (multipleOf) {
         max = Math.floor(max / multipleOf) * multipleOf;
@@ -17259,7 +17871,7 @@ var numberType = function numberType(value) {
 // returns floating point numbers, and `integer` type truncates the fraction
 // part, leaving the result as an integer.
 var integerType = function integerType(value) {
-    var generated = numberType(value);
+    var generated = numberType$1(value);
     // whether the generated number is positive or negative, need to use either
     // floor (positive) or ceil (negative) function to get rid of the fraction
     return generated > 0 ? Math.floor(generated) : Math.ceil(generated);
@@ -17276,7 +17888,7 @@ var LIPSUM_WORDS = ('Lorem ipsum dolor sit amet consectetur adipisicing elit sed
  * @param length
  * @returns {Array.<string>}
  */
-function wordsGenerator(length) {
+function wordsGenerator$1(length) {
     var words = random.shuffle(LIPSUM_WORDS);
     return words.slice(0, length);
 }
@@ -17299,7 +17911,7 @@ var objectType = function objectType(value, path, resolve, traverseCallback) {
         propertyKeys.length === 0 &&
         patternPropertyKeys.length === 0 &&
         utils.hasProperties(value, 'minProperties', 'maxProperties', 'dependencies', 'required')) {
-        throw new ParseError('missing properties for:\n' + JSON.stringify(value, null, '  '), path);
+        throw new ParseError('missing properties for:\n' + utils.short(value), path);
     }
     if (optionAPI('requiredOnly') === true) {
         requiredProperties.forEach(function (key) {
@@ -17352,7 +17964,7 @@ var objectType = function objectType(value, path, resolve, traverseCallback) {
             break;
         }
         if (allowsAdditional) {
-            var word = wordsGenerator(1) + utils.randexp('[a-f\\d]{1,3}');
+            var word = wordsGenerator$1(1) + utils.randexp('[a-f\\d]{1,3}');
             if (!props[word]) {
                 props[word] = additionalProperties || anyType;
                 current += 1;
@@ -17368,7 +17980,7 @@ var objectType = function objectType(value, path, resolve, traverseCallback) {
     }
     if (!allowsAdditional && current < min) {
         throw new ParseError('properties constraints were too strong to successfully generate a valid object for:\n' +
-            JSON.stringify(value, null, '  '), path);
+            utils.short(value), path);
     }
     return traverseCallback(props, path.concat(['properties']), resolve);
 };
@@ -17380,14 +17992,14 @@ var objectType = function objectType(value, path, resolve, traverseCallback) {
  */
 function produce() {
     var length = random.number(1, 5);
-    return wordsGenerator(length).join(' ');
+    return wordsGenerator$1(length).join(' ');
 }
 /**
  * Generates randomized concatenated string based on words generator.
  *
  * @returns {string}
  */
-function thunkGenerator(min, max) {
+function thunkGenerator$1(min, max) {
     if (min === void 0) { min = 0; }
     if (max === void 0) { max = 140; }
     var min = Math.max(0, min), max = random.number(min, max), result = produce();
@@ -17419,7 +18031,7 @@ var MOST_NEAR_DATETIME = 2524608000000;
  *
  * @returns {string}
  */
-function dateTimeGenerator() {
+function dateTimeGenerator$1() {
     var date = new Date();
     var days = random.number(-1000, MOST_NEAR_DATETIME);
     date.setTime(date.getTime() - days);
@@ -17449,13 +18061,13 @@ function coreFormatGenerator(coreFormat) {
 }
 
 function generateFormat(value, invalid) {
-    var callback = formatAPI(value.format);
+    var callback = formatAPI$1(value.format);
     if (typeof callback === 'function') {
         return callback(value);
     }
     switch (value.format) {
         case 'date-time':
-            return dateTimeGenerator();
+            return dateTimeGenerator$1();
         case 'ipv4':
             return ipv4Generator();
         case 'regex':
@@ -17469,7 +18081,7 @@ function generateFormat(value, invalid) {
         default:
             if (typeof callback === 'undefined') {
                 if (optionAPI('failOnInvalidFormat')) {
-                    throw new Error('unknown registry key ' + JSON.stringify(value.format));
+                    throw new Error('unknown registry key ' + utils.short(value.format));
                 }
                 else {
                     return invalid();
@@ -17493,16 +18105,16 @@ var stringType = function stringType(value) {
         }
     }
     if (value.format) {
-        output = generateFormat(value, function () { return thunkGenerator(minLength, maxLength); });
+        output = generateFormat(value, function () { return thunkGenerator$1(minLength, maxLength); });
     }
     else if (value.pattern) {
         output = utils.randexp(value.pattern);
     }
     else {
-        output = thunkGenerator(minLength, maxLength);
+        output = thunkGenerator$1(minLength, maxLength);
     }
     while (output.length < minLength) {
-        output += Math.random() > 0.7 ? thunkGenerator() : utils.randexp('.+');
+        output += optionAPI('random')() > 0.7 ? thunkGenerator$1() : utils.randexp('.+');
     }
     if (output.length > maxLength) {
         output = output.substr(0, maxLength);
@@ -17515,7 +18127,7 @@ var typeMap = {
     null: nullType,
     array: arrayType,
     integer: integerType,
-    number: numberType,
+    number: numberType$1,
     object: objectType,
     string: stringType
 };
@@ -17523,6 +18135,9 @@ var typeMap = {
 // TODO provide types
 function traverse(schema, path, resolve) {
     schema = resolve(schema);
+    if (!schema) {
+        return;
+    }
     if (Array.isArray(schema.enum)) {
         return random.pick(schema.enum);
     }
@@ -17548,7 +18163,7 @@ function traverse(schema, path, resolve) {
     if (typeof type === 'string') {
         if (!typeMap[type]) {
             if (optionAPI('failOnInvalidTypes')) {
-                throw new ParseError('unknown primitive ' + JSON.stringify(type), path.concat(['type']));
+                throw new ParseError('unknown primitive ' + utils.short(type), path.concat(['type']));
             }
             else {
                 return optionAPI('defaultInvalidTypeProduct');
@@ -17556,7 +18171,7 @@ function traverse(schema, path, resolve) {
         }
         else {
             try {
-                return typeMap[type](schema, path, resolve, traverse);
+                return utils.clean(typeMap[type](schema, path, resolve, traverse), null, schema.required);
             }
             catch (e) {
                 if (typeof e.path === 'undefined') {
@@ -17578,14 +18193,14 @@ function traverse(schema, path, resolve) {
             copy[prop] = schema[prop];
         }
     }
-    return utils.clean(copy);
+    return copy;
 }
 
 function isKey(prop) {
     return prop === 'enum' || prop === 'default' || prop === 'required' || prop === 'definitions';
 }
 // TODO provide types
-function run(schema, container) {
+function run(refs, schema, container) {
     try {
         return traverse(schema, [], function reduce(sub, maxReduceDepth) {
             if (typeof maxReduceDepth === 'undefined') {
@@ -17594,22 +18209,46 @@ function run(schema, container) {
             if (!sub) {
                 return null;
             }
+            // cleanup
+            if (sub.id && typeof sub.id === 'string') {
+                delete sub.id;
+                delete sub.$schema;
+            }
+            if (typeof sub.$ref === 'string') {
+                if (sub.$ref.indexOf('#/') === -1) {
+                    var ref = deref.util.findByRef(sub.$ref, refs);
+                    if (!ref) {
+                        throw new Error('Reference not found: ' + sub.$ref);
+                    }
+                    return ref;
+                }
+                // just remove the reference
+                delete sub.$ref;
+                return sub;
+            }
             if (Array.isArray(sub.allOf)) {
                 var schemas = sub.allOf;
                 delete sub.allOf;
                 // this is the only case where all sub-schemas
                 // must be resolved before any merge
                 schemas.forEach(function (subSchema) {
-                    utils.merge(sub, reduce(subSchema, maxReduceDepth + 1));
+                    var _sub = reduce(subSchema, maxReduceDepth + 1);
+                    // call given thunks if present
+                    utils.merge(sub, typeof _sub.thunk === 'function'
+                        ? _sub.thunk()
+                        : _sub);
                 });
             }
             if (Array.isArray(sub.oneOf || sub.anyOf)) {
-                var key = sub.oneOf ? 'oneOf' : 'anyOf';
                 var mix = sub.oneOf || sub.anyOf;
                 delete sub.anyOf;
                 delete sub.oneOf;
                 return {
-                    thunk: function () { return random.pick(mix); }
+                    thunk: function () {
+                        var copy = utils.merge({}, sub);
+                        utils.merge(copy, random.pick(mix));
+                        return copy;
+                    },
                 };
             }
             for (var prop in sub) {
@@ -17631,34 +18270,52 @@ function run(schema, container) {
 }
 
 var container = new Container();
-var jsf = function (schema, refs, cwd) {
+function getRefs(refs) {
     var $refs = {};
     if (Array.isArray(refs)) {
-        refs.forEach(function (schema) {
+        refs.map(deref.util.normalizeSchema).forEach(function (schema) {
             $refs[schema.id] = schema;
         });
     }
     else {
         $refs = refs || {};
     }
+    return $refs;
+}
+var jsf = function (schema, refs) {
+    var $ = deref();
+    var $refs = getRefs(refs);
+    return run($refs, $(schema, $refs, true), container);
+};
+jsf.resolve = function (schema, refs, cwd) {
+    if (typeof refs === 'string') {
+        cwd = refs;
+        refs = {};
+    }
+    // normalize basedir (browser aware)
+    cwd = cwd || (typeof process !== 'undefined' ? process.cwd() : '');
+    cwd = cwd.replace(/\/+$/, '') + '/';
+    var $refs = getRefs(refs);
+    // identical setup as json-schema-sequelizer
     var fixedRefs = {
         order: 300,
         canRead: true,
         read: function (file, callback) {
-            callback(null, $refs[file.url] || $refs[file.url.split('/').pop()]);
+            callback(null, deref.util.findByRef(cwd !== '/'
+                ? file.url.replace(cwd, '')
+                : file.url, $refs));
         },
     };
-    // normalize basedir (browser aware)
-    cwd = cwd || (typeof process !== 'undefined' ? process.cwd() : '');
-    cwd = cwd.replace(/\/+$/, '') + '/';
-    return $RefParser.dereference(cwd, schema, {
-        resolve: {
-            fixedRefs: fixedRefs,
+    return $RefParser
+        .dereference(cwd, schema, {
+        resolve: { fixedRefs: fixedRefs },
+        dereference: {
+            circular: 'ignore',
         },
-    }).then(function (schema) { return run(schema, container); });
+    }).then(function (sub) { return jsf(sub, refs); });
 };
 jsf.utils = utils;
-jsf.format = formatAPI;
+jsf.format = formatAPI$1;
 jsf.option = optionAPI;
 // built-in support
 container.define('pattern', utils.randexp);
@@ -17674,10 +18331,11 @@ jsf.define = function (name, cb) {
 jsf.locate = function (name) {
     return container.get(name);
 };
-jsf.version = '0.5.0-rc1';
+var VERSION="0.5.0-rc11";
+jsf.version = VERSION;
 
-var index = jsf;
+var lib = jsf;
 
-return index;
+return lib;
 
 })));

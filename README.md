@@ -11,9 +11,13 @@
 [![Inline docs](http://inch-ci.org/github/json-schema-faker/json-schema-faker.svg?branch=master)](http://inch-ci.org/github/json-schema-faker/json-schema-faker)
 [![Typedoc](https://img.shields.io/badge/typedoc-provided-blue.svg)](http://json-schema-faker.github.io/json-schema-faker/)
 
-Use [JSON Schema](http://json-schema.org/) along with fake generators to provide consistent and meaningful fake data for your system.
+Use [JSON Schema](http://json-schema.org/draft-04/json-schema-core.html) along with fake generators to provide consistent and meaningful fake data for your system.
 
 We are looking for **contributors**! If you wanna help us make `jsf` more awesome, simply write us so!
+
+## Join us!
+
+We've recently setup a [gitter room](https://gitter.im/json-schema-faker) for this project, if you want contribute, talk about specific issues from the library, or you need help on json-schema topics just reach us!
 
 ## What's new?
 
@@ -28,7 +32,7 @@ var schema = {
   $ref: REMOTE_REF
 };
 
-jsf(schema).then(function(result) {
+jsf.resolve(schema).then(function(result) {
   console.log(JSON.stringify(result, null, 2));
 });
 ```
@@ -41,6 +45,11 @@ jsf(schema).then(function(result) {
 Until a polished `v0.5.0` version is released we encourage you to use and test around this RC, the main API will remain intact but probably option names, or subtle behaviors can be introduced.
 
 Examples, new ideas, tips and any kind of kindly feedback is greatly appreciated.
+
+**NEW: BACKWARD COMPATIBILITY**
+
+- Since `0.5.0-rc3` we introduced a `jsf.resolve()` method for full-async results.
+- Since `0.5.0-rc3` the methods `jsf.sync()` is REMOVED and the API for `jsf()` will remain sync.
 
 Thanks for all your feedback in advance to everyone!
 
@@ -115,7 +124,7 @@ You can see [an example JS fiddle based on `jsf` loaded from cdnjs](https://jsfi
 
 JSON-Schema-faker (or `jsf` for short) combines two things:
 
- * The [JSON-schema specification](http://json-schema.org/), that defines what is the allowed content of a JSON document
+ * The [JSON-schema specification](http://json-schema.org/draft-04/json-schema-core.html), that defines what is the allowed content of a JSON document
  * Fake data generators, that are used to generate basic or complex data, conforming to the schema.
 
 Since `v0.5.x` external generators are not longer bundled with jsf, however built-in defaults are shipped for all basic types and formats.
@@ -157,7 +166,7 @@ var schema = {
   }
 };
 
-jsf(schema).then(function(sample) {
+jsf.resolve(schema).then(function(sample) {
   console.log(sample);
   // "[object Object]"
 
@@ -227,13 +236,13 @@ Below is the list of supported keywords:
 - `$ref` &mdash; Resolve internal references only, and/or external if provided.
 - `required` &mdash; All required properties are guaranteed, if not can be omitted.
 - `pattern` &mdash; Generate samples based on RegExp values.
-- `format` &mdash; Core formats only:
-  [`date-time`](http://json-schema.org/latest/json-schema-validation.html#anchor108),
-  [`email`](http://json-schema.org/latest/json-schema-validation.html#anchor111),
-  [`hostname`](http://json-schema.org/latest/json-schema-validation.html#anchor114),
-  [`ipv4`](http://json-schema.org/latest/json-schema-validation.html#anchor117),
-  [`ipv6`](http://json-schema.org/latest/json-schema-validation.html#anchor120)
-  and [`uri`](http://json-schema.org/latest/json-schema-validation.html#anchor123)
+- `format` &mdash; Core formats **v4-draft only**:
+  [`date-time`](http://json-schema.org/draft-04/json-schema-validation.html#anchor108),
+  [`email`](http://json-schema.org/draft-04/json-schema-validation.html#anchor111),
+  [`hostname`](http://json-schema.org/draft-04/json-schema-validation.html#anchor114),
+  [`ipv4`](http://json-schema.org/draft-04/json-schema-validation.html#anchor117),
+  [`ipv6`](http://json-schema.org/draft-04/json-schema-validation.html#anchor120)
+  and [`uri`](http://json-schema.org/draft-04/json-schema-validation.html#anchor123)
     -- [demo »](http://json-schema-faker.js.org/#gist/f58db80cbf52c12c623166090240d964)
 - `enum` &mdash; Returns any of these enumerated values.
 - `minLength`, `maxLength` &mdash; Applies length constraints to string values.
@@ -275,7 +284,7 @@ var refs = [
   }
 ];
 
-jsf(schema, refs).then(function(sample) {
+jsf.resolve(schema, refs).then(function(sample) {
   console.log(sample.someValue);
   // "voluptatem"
 });
@@ -400,7 +409,7 @@ Additionally, you can add custom generators for those:
 
 ```javascript
 jsf.format('semver', function() {
-  return jsf.utils.randexp('\\d\\.\\d\\.[1-9]\\d?');
+  return jsf.random.randexp('\\d\\.\\d\\.[1-9]\\d?');
 });
 ```
 
@@ -432,8 +441,11 @@ You may define following options for `jsf` that alter its behavior:
 
 - `failOnInvalidTypes`: boolean - don't throw exception when invalid type passed
 - `defaultInvalidTypeProduct`: - default value generated for a schema with invalid type (works only if `failOnInvalidTypes` is set to `false`)
+- `failOnInvalidFormat`: boolean - don't throw exception when invalid format passed
 - `maxItems`: number - Configure a maximum amount of items to generate in an array. This will override the maximum items found inside a JSON Schema.
 - `maxLength`: number - Configure a maximum length to allow generating strings for. This will override the maximum length found inside a JSON Schema.
+- `random`: Function - a replacement for `Math.random` to support pseudorandom number generation.
+- `alwaysFakeOptionals`: boolean - When true, all object-properties will be generated regardless they're `required` or not.
 
 Set options just as below:
 
@@ -469,7 +481,7 @@ var schema = {
   }
 }
 
-jsf(schema).then(...);
+jsf.resolve(schema).then(...);
 ```
 
 or if you want to use [faker's *individual localization packages*](https://github.com/Marak/faker.js#individual-localization-packages), simply do the following:
@@ -510,7 +522,7 @@ var schema = {
   "chance": "user"
 }
 
-jsf(schema).then(...);
+jsf.resolve(schema).then(...);
 ```
 
 The first parameter of `extend` function is the generator name (`faker`, `chance`, etc.). The second one is the function that **must return** the dependency library.

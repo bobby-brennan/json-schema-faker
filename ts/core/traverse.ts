@@ -6,11 +6,24 @@ import types from '../types/index';
 import optionAPI from '../api/option';
 
 // TODO provide types
-function traverse(schema: JsonSchema, path: SchemaPath, resolve: Function) {
+function traverse(schema: JsonSchema, path: SchemaPath, resolve: Function, rootSchema?: JsonSchema) {
   schema = resolve(schema);
 
+  if (!schema) {
+    return;
+  }
+
+  // default values has higher precedence
+  if (optionAPI('useDefaultValue') && 'default' in schema) {
+    return schema.default;
+  }
+
+  if (schema.not && typeof schema.not === 'object') {
+    schema = utils.notValue(sub.not);
+  }
+
   if (Array.isArray(schema.enum)) {
-    return random.pick(schema.enum);
+    return utils.typecast(schema, () => random.pick(schema.enum));
   }
 
   // thunks can return sub-schemas
@@ -19,11 +32,7 @@ function traverse(schema: JsonSchema, path: SchemaPath, resolve: Function) {
   }
 
   if (typeof schema.generate === 'function') {
-    return utils.typecast(schema.generate(), schema);
-  }
-
-  if (optionAPI('useDefaultValue') && 'default' in schema) {
-    return schema.default;
+    return utils.typecast(schema, () => schema.generate(rootSchema));
   }
 
   // TODO remove the ugly overcome
@@ -34,18 +43,28 @@ function traverse(schema: JsonSchema, path: SchemaPath, resolve: Function) {
   } else if (typeof type === 'undefined') {
     // Attempt to infer the type
     type = inferType(schema, path) || type;
+
+    if (type) {
+      schema.type = type;
+    }
   }
 
   if (typeof type === 'string') {
     if (!types[type]) {
       if (optionAPI('failOnInvalidTypes')) {
-        throw new ParseError('unknown primitive ' + JSON.stringify(type), path.concat(['type']));
+        throw new ParseError('unknown primitive ' + utils.short(type), path.concat(['type']));
       } else {
         return optionAPI('defaultInvalidTypeProduct');
       }
     } else {
       try {
-        return types[type](schema, path, resolve, traverse);
+        const result = types[type](schema, path, resolve, traverse);
+
+        const required = schema.items
+          ? schema.items.required
+          : schema.required;
+
+        return utils.clean(result, null, required);
       } catch (e) {
         if (typeof e.path === 'undefined') {
           throw new ParseError(e.message, path);
@@ -63,13 +82,13 @@ function traverse(schema: JsonSchema, path: SchemaPath, resolve: Function) {
 
   for (var prop in schema) {
     if (typeof schema[prop] === 'object' && prop !== 'definitions') {
-      copy[prop] = traverse(schema[prop], path.concat([prop]), resolve);
+      copy[prop] = traverse(schema[prop], path.concat([prop]), resolve, copy);
     } else {
       copy[prop] = schema[prop];
     }
   }
 
-  return utils.clean(copy);
+  return copy;
 }
 
 export default traverse;

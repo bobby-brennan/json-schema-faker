@@ -1,6 +1,18 @@
+function template(value, schema) {
+  if (Array.isArray(value)) {
+    return value.map(x => template(x, schema));
+  }
+
+  if (typeof value === 'string') {
+    value = value.replace(/#\{([\w.-]+)\}/g, (_, $1) => schema[$1]);
+  }
+
+  return value;
+}
+
 // dynamic proxy for custom generators
 function proxy(gen) {
-  return (value) => {
+  return (value, schema, property, rootSchema) => {
     var fn = value;
     var args = [];
 
@@ -32,7 +44,16 @@ function proxy(gen) {
 
     // invoke dynamic generators
     if (typeof value === 'function') {
-      value = value.apply(ctx, args);
+      value = value.apply(ctx, args.map(x => template(x, rootSchema)));
+    }
+
+    // test for pending callbacks
+    if (Object.prototype.toString.call(value) === '[object Object]') {
+      for (var key in value) {
+        if (typeof value[key] === 'function') {
+          throw new Error('Cannot resolve value for "' + property + ': ' + fn + '", given: ' + value);
+        }
+      }
     }
 
     return value;
@@ -109,13 +130,19 @@ class Container {
   public wrap(schema: JsonSchema): any {
     var keys = Object.keys(schema);
     var length = keys.length;
+    var context = {};
 
     while (length--) {
-      var fn = keys[length];
+      var fn = keys[length].replace(/^x-/, '');
       var gen = this.support[fn];
 
       if (typeof gen === 'function') {
-        schema.generate = () => gen(schema[fn], schema);
+        Object.defineProperty(schema, 'generate', {
+          configurable: false,
+          enumerable: false,
+          writable: false,
+          value: rootSchema => gen.call(context, schema[keys[length]], schema, keys[length], rootSchema),
+        });
         break;
       }
     }

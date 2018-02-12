@@ -1,5 +1,23 @@
 /// <reference path="../index.d.ts" />
 
+import optionAPI from '../api/option';
+import env from '../core/constants';
+
+import RandExp from 'randexp';
+
+function _randexp(value: string) {
+  // set maximum default, see #193
+  RandExp.prototype.max = optionAPI('defaultRandExpMax');
+
+  // same implementation as the original except using our random
+  RandExp.prototype.randInt = (a, b) =>
+    a + Math.floor(optionAPI('random')() * (1 + b - a));
+
+  var re = new RandExp(value);
+
+  return re.gen();
+}
+
 /**
  * Returns random element of a collection
  *
@@ -7,7 +25,7 @@
  * @returns {T}
  */
 function pick<T>(collection: T[]): T {
-  return collection[Math.floor(Math.random() * collection.length)];
+  return collection[Math.floor(optionAPI('random')() * collection.length)];
 }
 
 /**
@@ -23,7 +41,7 @@ function shuffle<T>(collection: T[]): T[] {
     length: number = collection.length;
 
   for (; length > 0;) {
-    key = Math.floor(Math.random() * length);
+    key = Math.floor(optionAPI('random')() * length);
     // swap
     tmp = copy[--length];
     copy[length] = copy[key];
@@ -33,14 +51,6 @@ function shuffle<T>(collection: T[]): T[] {
   return copy;
 }
 
-/**
- * These values determine default range for random.number function
- *
- * @type {number}
- */
-var MIN_NUMBER = -100,
-    MAX_NUMBER = 100;
-
 
 /**
  * Returns a random integer between min (inclusive) and max (inclusive)
@@ -48,7 +58,7 @@ var MIN_NUMBER = -100,
  * @see http://stackoverflow.com/a/1527820/769384
  */
 function getRandom(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
+  return optionAPI('random')() * (max - min) + min;
 }
 
 /**
@@ -62,8 +72,8 @@ function getRandom(min: number, max: number): number {
  * @returns {number}
  */
 function number(min?: number, max?: number, defMin?: number, defMax?: number, hasPrecision: boolean = false): number {
-  defMin = typeof defMin === 'undefined' ? MIN_NUMBER : defMin;
-  defMax = typeof defMax === 'undefined' ? MAX_NUMBER : defMax;
+  defMin = typeof defMin === 'undefined' ? env.MIN_NUMBER : defMin;
+  defMax = typeof defMax === 'undefined' ? env.MAX_NUMBER : defMax;
 
   min = typeof min === 'undefined' ? defMin : min;
   max = typeof max === 'undefined' ? defMax : max;
@@ -75,14 +85,54 @@ function number(min?: number, max?: number, defMin?: number, defMax?: number, ha
   var result: number = getRandom(min, max);
 
   if (!hasPrecision) {
-    return parseInt(result + '', 10);
+    return Math.round(result);
   }
 
   return result;
 }
 
+function by(type) {
+  switch (type) {
+    case 'seconds':
+      return number(0, 60) * 60;
+
+    case 'minutes':
+      return number(15, 50) * 612;
+
+    case 'hours':
+      return number(12, 72) * 36123;
+
+    case 'days':
+      return number(7, 30) * 86412345;
+
+    case 'weeks':
+      return number(4, 52) * 604812345;
+
+    case 'months':
+      return number(2, 13) * 2592012345;
+
+    case 'years':
+      return number(1, 20) * 31104012345;
+  }
+}
+
+function date(step) {
+  if (step) {
+    return by(step);
+  }
+
+  var now = new Date();
+  var days = number(-1000, env.MOST_NEAR_DATETIME);
+
+  now.setTime(now.getTime() - days);
+
+  return now;
+}
+
 export default {
   pick: pick,
+  date: date,
+  randexp: _randexp,
   shuffle: shuffle,
   number: number,
 };

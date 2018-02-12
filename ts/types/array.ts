@@ -41,7 +41,7 @@ var arrayType: FTypeGenerator = function arrayType(value: IArraySchema, path: Sc
 
   if (!(value.items || value.additionalItems)) {
     if (utils.hasProperties(value, 'minItems', 'maxItems', 'uniqueItems')) {
-      throw new ParseError('missing items for ' + JSON.stringify(value), path);
+      throw new ParseError('missing items for ' + utils.short(value), path);
     }
     return items;
   }
@@ -51,7 +51,7 @@ var arrayType: FTypeGenerator = function arrayType(value: IArraySchema, path: Sc
   // so that value.items.map becomes recognized for typescript compiler
   var tmpItems = value.items;
   if (tmpItems instanceof Array) {
-    return Array.prototype.concat.apply(items, tmpItems.map(function(item, key) {
+    return Array.prototype.concat.call(items, tmpItems.map(function(item, key) {
       var itemSubpath: SchemaPath = path.concat(['items', key + '']);
       return traverseCallback(item, itemSubpath, resolve);
     }));
@@ -60,11 +60,11 @@ var arrayType: FTypeGenerator = function arrayType(value: IArraySchema, path: Sc
   var minItems = value.minItems;
   var maxItems = value.maxItems;
 
-  if (optionAPI('defaultMinItems') && minItems === undefined) {
+  if (optionAPI('minItems') && minItems === undefined) {
     // fix boundaries
     minItems = !maxItems
-      ? optionAPI('defaultMinItems')
-      : Math.min(optionAPI('defaultMinItems'), maxItems);
+      ? optionAPI('minItems')
+      : Math.min(optionAPI('minItems'), maxItems);
   }
 
   if (optionAPI('maxItems')) {
@@ -79,9 +79,10 @@ var arrayType: FTypeGenerator = function arrayType(value: IArraySchema, path: Sc
     }
   }
 
-  var length: number = random.number(minItems, maxItems, 1, 5),
-      // TODO below looks bad. Should additionalItems be copied as-is?
-      sample: Object = typeof value.additionalItems === 'object' ? value.additionalItems : {};
+  var length: number = (maxItems != null && optionAPI('alwaysFakeOptionals')) ?
+    maxItems : random.number(minItems, maxItems, 1, 5),
+    // TODO below looks bad. Should additionalItems be copied as-is?
+    sample: Object = typeof value.additionalItems === 'object' ? value.additionalItems : {};
 
   for (var current: number = items.length; current < length; current++) {
     var itemSubpath: SchemaPath = path.concat(['items', current + '']);

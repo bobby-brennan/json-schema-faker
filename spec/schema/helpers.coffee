@@ -33,7 +33,11 @@ global.customMatchers =
         ignoreUnresolvableReferences: false
 
       validator.setRemoteReference(k, v) for k, v of fixed
-      valid = validator.validate actual, clone(expected)
+
+      try
+        valid = validator.validate clone(actual), clone(expected)
+      catch e
+        fail.push e.message
 
       if errors = validator.getLastErrors() or not valid
         fail.push errors.map((e) ->
@@ -74,36 +78,3 @@ global.customMatchers =
 
       pass: !fail.length
       message: fail.join('\n') if fail.length
-
-  toHaveNonEmptyProps: ->
-    compare: (actual, expected) ->
-      fail = 0
-
-      test = (o) ->
-        if Array.isArray(o)
-          o = o.map(test).filter (x) ->
-            typeof x isnt 'undefined'
-
-          unless o.length
-            fail += 1
-            return
-
-        else if typeof o is 'object'
-          for k, v of o
-            f = test(v)
-
-            if typeof f is 'undefined'
-              delete o[k]
-            else
-              o[k] = f
-
-          unless Object.keys(o).length
-            fail += 1
-            return
-
-        o
-
-      safe = JSON.stringify actual
-
-      pass: fail is 0
-      message: "Object #{safe} has empty properties" if fail

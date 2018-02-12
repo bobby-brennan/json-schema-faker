@@ -1,6 +1,6 @@
 import Registry from './Registry';
 
-type Option = boolean|number;
+type Option = boolean|number|Function;
 
 /**
  * This class defines a registry for custom settings used within JSF.
@@ -9,16 +9,25 @@ class OptionRegistry extends Registry<Option> {
 
   constructor() {
     super();
-    this.data['failOnInvalidTypes'] = true;
     this.data['defaultInvalidTypeProduct'] = null;
+    this.data['defaultRandExpMax'] = 10;
+
+    this.data['ignoreMissingRefs'] = false;
+    this.data['failOnInvalidTypes'] = true;
     this.data['failOnInvalidFormat'] = true;
+
+    this.data['alwaysFakeOptionals'] = false;
     this.data['useDefaultValue'] = false;
     this.data['requiredOnly'] = false;
+
+    this.data['minItems'] = 0;
     this.data['maxItems'] = null;
     this.data['maxLength'] = null;
-    this.data['defaultMinItems'] = 0;
-    this.data['defaultRandExpMax'] = 10;
-    this.data['alwaysFakeOptionals'] = false;
+
+    this.data['reuseProperties'] = false;
+    this.data['fillProperties'] = true;
+
+    this.data['random'] = Math.random;
   }
 }
 

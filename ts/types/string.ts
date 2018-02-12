@@ -4,6 +4,7 @@ import dateTime from '../generators/dateTime';
 import coreFormat from '../generators/coreFormat';
 import optionAPI from '../api/option';
 import format from '../api/format';
+import random from '../core/random';
 import utils from '../core/utils';
 
 function generateFormat(value: IStringSchema, invalid: () => string): string {
@@ -15,6 +16,7 @@ function generateFormat(value: IStringSchema, invalid: () => string): string {
 
   switch (value.format) {
     case 'date-time':
+    case 'datetime':
       return dateTime();
     case 'ipv4':
       return ipv4();
@@ -25,11 +27,12 @@ function generateFormat(value: IStringSchema, invalid: () => string): string {
     case 'hostname':
     case 'ipv6':
     case 'uri':
+    case 'uri-reference':
       return coreFormat(value.format);
     default:
       if (typeof callback === 'undefined') {
         if (optionAPI('failOnInvalidFormat')) {
-          throw new Error('unknown registry key ' + JSON.stringify(value.format));
+          throw new Error('unknown registry key ' + utils.short(value.format));
         } else {
           return invalid();
         }
@@ -42,36 +45,17 @@ function generateFormat(value: IStringSchema, invalid: () => string): string {
 var stringType: FTypeGenerator = function stringType(value: IStringSchema): string {
   var output: string;
 
-  var minLength = value.minLength;
-  var maxLength = value.maxLength;
-
-  if (optionAPI('maxLength')) {
-    // Don't allow user to set max length above our maximum
-    if (maxLength && maxLength > optionAPI('maxLength')) {
-      maxLength = optionAPI('maxLength');
+  output = utils.typecast(value, opts => {
+    if (value.format) {
+      return generateFormat(value, () => thunk(opts.minLength, opts.maxLength) );
     }
 
-    // Don't allow user to set min length above our maximum
-    if (minLength && minLength > optionAPI('maxLength')) {
-      minLength = optionAPI('maxLength');
+    if (value.pattern) {
+      return random.randexp(value.pattern);
     }
-  }
 
-  if (value.format) {
-    output = generateFormat(value, () => thunk(minLength, maxLength) );
-  } else if (value.pattern) {
-    output = utils.randexp(value.pattern);
-  } else {
-    output = thunk(minLength, maxLength);
-  }
-
-  while (output.length < minLength) {
-    output += Math.random() > 0.7 ? thunk() : utils.randexp('.+');
-  }
-
-  if (output.length > maxLength) {
-    output = output.substr(0, maxLength);
-  }
+    return thunk(opts.minLength, opts.maxLength);
+  });
 
   return output;
 };
